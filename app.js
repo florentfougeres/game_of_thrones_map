@@ -13,6 +13,7 @@ const DATA_FILES = {
   mur: "mur.geojson",
   paysage: "paysage.geojson",
   politique: "politique.geojson",
+  regions: "regions.geojson",
   rivieres: "rivieres.geojson",
   routes: "routes.geojson",
 };
@@ -28,22 +29,33 @@ const COLORS = {
   route: "#8a5a2b",
   wallCasing: "#0c2d3a",
   wallLine: "#eaf7fb",
+  waterLabel: "#0c2d3a",
+  waterLabelHalo: "#f2ead0",
   region: "rgba(80, 46, 20, 0.6)",
   regionHalo: "rgba(236, 223, 192, 0.85)",
   city: { fill: "#f2c14e", stroke: "#7a1f1f" },
   town: { fill: "#d98a3d", stroke: "#6b4a25" },
   castle: { fill: "#4a5568", stroke: "#1f2530" },
   ruin: { fill: "#9a9a9a", stroke: "#5a5a5a" },
-  forest: { fill: "rgba(46, 79, 42, 0.4)", line: "rgba(46, 79, 42, 0.7)", text: "#2e4f2a" },
-  mountain: { fill: "rgba(96, 82, 66, 0.42)", line: "rgba(74, 60, 46, 0.75)", text: "#4a3c2e" },
-  swamp: { fill: "rgba(72, 84, 42, 0.42)", line: "rgba(72, 84, 42, 0.75)", text: "#48542a" },
-  stepp: { fill: "rgba(196, 164, 86, 0.35)", line: "rgba(160, 128, 60, 0.7)", text: "#8a6a2b" },
+  forest: { fill: "rgba(46, 79, 42, 0.16)", text: "#2e4f2a" },
+  mountain: { fill: "rgba(96, 82, 66, 0.18)", text: "#4a3c2e" },
+  swamp: { fill: "rgba(72, 84, 42, 0.16)", text: "#48542a" },
+  stepp: { fill: "rgba(196, 164, 86, 0.14)", text: "#8a6a2b" },
+  regionWater: { text: "#2f6a86" },
+  regionShore: { text: "#8a7350" },
+  regionLand: { text: "#6b4a25" },
+  regionDesert: { text: "#b8752e" },
+};
+
+const HOUSE_LABELS_FR = {
+  "Wildlings": "Sauvageons",
+  "Night's Watch": "Garde de Nuit",
 };
 
 const CATEGORY_LABELS = {
   iles: "Île",
   lacs: "Lac",
-  politique: "Région",
+  politique: "Royaume",
   rivieres: "Rivière",
   routes: "Route",
   City: "Ville",
@@ -55,6 +67,10 @@ const CATEGORY_LABELS = {
   mountain: "Montagne",
   swamp: "Marais",
   stepp: "Steppe",
+  water: "Mer",
+  shore: "Rivage",
+  land: "Contrée",
+  desert: "Désert",
 };
 
 const CATEGORY_COLORS = {
@@ -71,6 +87,10 @@ const CATEGORY_COLORS = {
   mountain: COLORS.mountain.text,
   swamp: COLORS.swamp.text,
   stepp: COLORS.stepp.text,
+  water: COLORS.regionWater.text,
+  shore: COLORS.regionShore.text,
+  land: COLORS.regionLand.text,
+  desert: COLORS.regionDesert.text,
   Other: COLORS.ruin.fill,
 };
 
@@ -117,6 +137,61 @@ function getBBox(geometry) {
 
 function bboxCenter(bbox) {
   return [(bbox[0][0] + bbox[1][0]) / 2, (bbox[0][1] + bbox[1][1]) / 2];
+}
+
+/* ---------------------------------------------------------------- paysage fade bands */
+
+// Génère, pour chaque polygone de paysage, une série d'anneaux concentriques
+// (via un buffer négatif) avec une opacité croissante vers le centre : ça
+// donne un remplissage qui se fond progressivement sur les bords plutôt
+// qu'une couleur plate coupée net.
+const PAYSAGE_FADE_RINGS = [0, 0.1, 0.22, 0.36];
+const PAYSAGE_FADE_OPACITY = [0.035, 0.07, 0.11, 0.15];
+
+function buildPaysageFadeBands(paysageFC) {
+  const bands = [];
+
+  paysageFC.features.forEach((f) => {
+    const bbox = getBBox(f.geometry);
+    const sizeKm = Math.min(bbox[1][0] - bbox[0][0], bbox[1][1] - bbox[0][1]) * 111;
+
+    PAYSAGE_FADE_RINGS.forEach((fraction, band) => {
+      let geometry = f.geometry;
+      if (fraction > 0) {
+        try {
+          const buffered = turf.buffer(f, -sizeKm * fraction, { units: "kilometers" });
+          if (!buffered || !buffered.geometry) return;
+          geometry = buffered.geometry;
+        } catch (err) {
+          return;
+        }
+      }
+      bands.push({
+        type: "Feature",
+        geometry,
+        properties: { type: f.properties.type, band },
+      });
+    });
+  });
+
+  return { type: "FeatureCollection", features: bands };
+}
+
+// Convertit chaque polygone en un point garanti sur sa surface (turf.pointOnFeature).
+// MapLibre calcule sinon lui-même un point d'ancrage pour les labels posés sur des
+// polygones, ce qui échoue silencieusement (aucun label affiché) pour les
+// multi-polygones étroits/dispersés comme "Les Îles de Fer".
+function buildLabelPoints(featureCollection) {
+  const points = featureCollection.features.map((f) => {
+    let geometry;
+    try {
+      geometry = turf.pointOnFeature(f).geometry;
+    } catch (err) {
+      geometry = { type: "Point", coordinates: bboxCenter(getBBox(f.geometry)) };
+    }
+    return { type: "Feature", geometry, properties: f.properties };
+  });
+  return { type: "FeatureCollection", features: points };
 }
 
 /* ---------------------------------------------------------------- load data */
@@ -182,8 +257,6 @@ async function loadAllData() {
     // cadrage large sur l'ensemble de la carte, avec marge
     const pad = 40;
     map.fitBounds(fondBBox, { padding: pad, duration: 0 });
-
-    setupInteractivity(map);
   });
 
   const searchIndex = buildSearchIndex(data);
@@ -197,11 +270,15 @@ function addSources(map, data) {
   map.addSource("fond", { type: "geojson", data: data.fond });
   map.addSource("lacs", { type: "geojson", data: data.lacs });
   map.addSource("politique", { type: "geojson", data: data.politique });
+  map.addSource("politique-points", { type: "geojson", data: buildLabelPoints(data.politique) });
+  map.addSource("regions", { type: "geojson", data: data.regions });
+  map.addSource("regions-points", { type: "geojson", data: buildLabelPoints(data.regions) });
   map.addSource("frontiere", { type: "geojson", data: data.frontiere });
   map.addSource("routes", { type: "geojson", data: data.routes });
   map.addSource("rivieres", { type: "geojson", data: data.rivieres });
   map.addSource("mur", { type: "geojson", data: data.mur });
   map.addSource("paysage", { type: "geojson", data: data.paysage });
+  map.addSource("paysage-fade", { type: "geojson", data: buildPaysageFadeBands(data.paysage) });
   map.addSource("iles", { type: "geojson", data: data.iles });
   map.addSource("lieux", { type: "geojson", data: data.lieux });
   map.addSource("highlight", {
@@ -231,50 +308,51 @@ function addLayers(map) {
     source: "lacs",
     paint: { "line-color": COLORS.lakeLine, "line-width": 1 },
   });
+  map.addLayer({
+    id: "lacs-label",
+    type: "symbol",
+    source: "lacs",
+    filter: ["has", "name_fr"],
+    layout: {
+      "text-field": ["get", "name_fr"],
+      "text-font": ["Noto Sans Italic"],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 3, 10, 8, 13],
+    },
+    paint: {
+      "text-color": COLORS.waterLabel,
+      "text-halo-color": COLORS.waterLabelHalo,
+      "text-halo-width": 1.6,
+    },
+  });
 
   // ---- paysages (forêts, montagnes, marais, steppes) ----------------
+  // anneaux concentriques (cf. buildPaysageFadeBands) : le remplissage se
+  // fond progressivement sur les bords, sans aucun contour net.
+  const paysageToneColor = [
+    "match", ["get", "type"],
+    "forest", COLORS.forest.text,
+    "mountain", COLORS.mountain.text,
+    "swamp", COLORS.swamp.text,
+    "stepp", COLORS.stepp.text,
+    "#5a4327",
+  ];
   map.addLayer({
     id: "paysage-fill",
     type: "fill",
-    source: "paysage",
+    source: "paysage-fade",
     paint: {
-      "fill-color": [
-        "match", ["get", "type"],
-        "forest", COLORS.forest.fill,
-        "mountain", COLORS.mountain.fill,
-        "swamp", COLORS.swamp.fill,
-        "stepp", COLORS.stepp.fill,
-        "rgba(120,120,120,0.3)",
+      "fill-color": paysageToneColor,
+      "fill-opacity": [
+        "match", ["get", "band"],
+        0, PAYSAGE_FADE_OPACITY[0],
+        1, PAYSAGE_FADE_OPACITY[1],
+        2, PAYSAGE_FADE_OPACITY[2],
+        3, PAYSAGE_FADE_OPACITY[3],
+        PAYSAGE_FADE_OPACITY[3],
       ],
+      "fill-outline-color": "transparent",
     },
   });
-  const paysageLineColor = [
-    "match", ["get", "type"],
-    "forest", COLORS.forest.line,
-    "mountain", COLORS.mountain.line,
-    "swamp", COLORS.swamp.line,
-    "stepp", COLORS.stepp.line,
-    "rgba(90,90,90,0.6)",
-  ];
-  map.addLayer({
-    id: "paysage-outline-mountain",
-    type: "line",
-    source: "paysage",
-    filter: ["==", ["get", "type"], "mountain"],
-    paint: { "line-color": paysageLineColor, "line-width": 1.2 },
-  });
-  map.addLayer({
-    id: "paysage-outline-other",
-    type: "line",
-    source: "paysage",
-    filter: ["!=", ["get", "type"], "mountain"],
-    paint: {
-      "line-color": paysageLineColor,
-      "line-width": 0.7,
-      "line-dasharray": [2, 1.5],
-    },
-  });
-
   // ---- frontières ----------------------------------------------------
   map.addLayer({
     id: "frontiere-line",
@@ -351,9 +429,9 @@ function addLayers(map) {
       "text-letter-spacing": 0.02,
     },
     paint: {
-      "text-color": COLORS.river,
-      "text-halo-color": COLORS.land,
-      "text-halo-width": 1.4,
+      "text-color": COLORS.waterLabel,
+      "text-halo-color": COLORS.waterLabelHalo,
+      "text-halo-width": 1.6,
     },
   });
 
@@ -394,19 +472,82 @@ function addLayers(map) {
   map.addLayer({
     id: "politique-label",
     type: "symbol",
-    source: "politique",
-    filter: ["has", "name_fr"],
+    source: "politique-points",
     layout: {
-      "text-field": ["upcase", ["get", "name_fr"]],
+      "text-field": [
+        "upcase",
+        [
+          "coalesce",
+          ["get", "name_fr"],
+          ["match", ["get", "ClaimedBy"],
+            "Wildlings", "Terres au-delà du Mur",
+            "Night's Watch", "Garde de Nuit",
+            ["get", "ClaimedBy"],
+          ],
+        ],
+      ],
       "text-font": ["Noto Sans Bold"],
       "text-size": ["interpolate", ["linear"], ["zoom"], 2, 13, 7, 22],
       "text-letter-spacing": 0.12,
       "text-max-width": 8,
     },
     paint: {
-      "text-color": COLORS.region,
+      "text-color": [
+        "match", ["get", "ClaimedBy"],
+        "Stark", "rgba(90, 100, 112, 0.7)",
+        "Lannister", "rgba(160, 24, 24, 0.65)",
+        "Baratheon", "rgba(48, 40, 20, 0.7)",
+        "Tyrell", "rgba(63, 110, 42, 0.65)",
+        "Martell", "rgba(191, 84, 21, 0.65)",
+        "Greyjoy", "rgba(30, 42, 52, 0.7)",
+        "Arryn", "rgba(70, 120, 163, 0.65)",
+        "Tully", "rgba(48, 79, 140, 0.65)",
+        "Night's Watch", "rgba(30, 30, 30, 0.7)",
+        "Wildlings", "rgba(112, 75, 37, 0.65)",
+        COLORS.region,
+      ],
       "text-halo-color": COLORS.regionHalo,
       "text-halo-width": 1.5,
+    },
+  });
+
+  // ---- régions géographiques (mers, rivages, monts, forêts, déserts) --
+  // label uniquement, couleur et casse adaptées à la colonne "type"
+  map.addLayer({
+    id: "regions-label",
+    type: "symbol",
+    source: "regions-points",
+    layout: {
+      "text-field": [
+        "match", ["get", "type"],
+        "mountain", ["upcase", ["get", "name_fr"]],
+        "desert", ["upcase", ["get", "name_fr"]],
+        ["get", "name_fr"],
+      ],
+      "text-font": [
+        "match", ["get", "type"],
+        "mountain", ["literal", ["Noto Sans Bold"]],
+        "desert", ["literal", ["Noto Sans Bold"]],
+        "land", ["literal", ["Noto Sans Regular"]],
+        ["literal", ["Noto Sans Italic"]],
+      ],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 2, 11, 7, 17],
+      "text-letter-spacing": ["match", ["get", "type"], "mountain", 0.1, "desert", 0.1, 0.02],
+      "text-max-width": 8,
+    },
+    paint: {
+      "text-color": [
+        "match", ["get", "type"],
+        "water", COLORS.regionWater.text,
+        "shore", COLORS.regionShore.text,
+        "land", COLORS.regionLand.text,
+        "desert", COLORS.regionDesert.text,
+        "mountain", COLORS.mountain.text,
+        "forest", COLORS.forest.text,
+        COLORS.regionLand.text,
+      ],
+      "text-halo-color": COLORS.regionHalo,
+      "text-halo-width": 1.4,
     },
   });
 
@@ -455,16 +596,42 @@ function addLayers(map) {
       "text-max-width": 7,
     },
     paint: {
-      "text-color": [
-        "match", ["get", "type"],
-        "forest", COLORS.forest.text,
-        "mountain", COLORS.mountain.text,
-        "swamp", COLORS.swamp.text,
-        "stepp", COLORS.stepp.text,
-        "#5a4327",
-      ],
+      "text-color": paysageToneColor,
       "text-halo-color": COLORS.land,
       "text-halo-width": 1.4,
+    },
+  });
+  // labels génériques (pas de name_fr) : uniquement à partir d'un certain
+  // zoom pour ne pas noyer la carte de "Montagne" / "Forêt" répétés
+  map.addLayer({
+    id: "paysage-label-generic",
+    type: "symbol",
+    source: "paysage",
+    filter: ["!", ["has", "name_fr"]],
+    minzoom: 5,
+    layout: {
+      "text-field": [
+        "match", ["get", "type"],
+        "forest", "Forêt",
+        "mountain", "MONTAGNE",
+        "swamp", "Marais",
+        "stepp", "Steppe",
+        "Paysage",
+      ],
+      "text-font": [
+        "match", ["get", "type"],
+        "mountain", ["literal", ["Noto Sans Bold"]],
+        ["literal", ["Noto Sans Italic"]],
+      ],
+      "text-size": 10,
+      "text-letter-spacing": ["match", ["get", "type"], "mountain", 0.08, 0.01],
+      "symbol-placement": "point",
+    },
+    paint: {
+      "text-color": paysageToneColor,
+      "text-halo-color": COLORS.land,
+      "text-halo-width": 1.2,
+      "text-opacity": 0.8,
     },
   });
 
@@ -533,61 +700,14 @@ function addLayers(map) {
   });
 }
 
-/* ---------------------------------------------------------------- interactivity (popups) */
-
-function setupInteractivity(map) {
-  const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "260px" });
-
-  const clickableLayers = [
-    "lieux-circle-city", "lieux-circle-town", "lieux-circle-castle", "lieux-circle-ruin",
-    "lacs-fill", "rivieres-line", "iles-label", "politique-label", "paysage-fill",
-  ];
-
-  clickableLayers.forEach((layerId) => {
-    map.on("mouseenter", layerId, () => (map.getCanvas().style.cursor = "pointer"));
-    map.on("mouseleave", layerId, () => (map.getCanvas().style.cursor = ""));
-    map.on("click", layerId, (e) => {
-      const f = e.features[0];
-      const props = f.properties;
-      const name = props.name_fr;
-      if (!name) return;
-
-      let category = "";
-      let extra = "";
-      if (layerId.startsWith("lieux-circle-")) {
-        category = CATEGORY_LABELS[props.type] || "Lieu";
-      } else if (layerId === "lacs-fill") {
-        category = "Lac";
-      } else if (layerId === "rivieres-line") {
-        category = "Rivière";
-      } else if (layerId === "iles-label") {
-        category = "Île";
-      } else if (layerId === "politique-label") {
-        category = "Région";
-        if (props.ClaimedBy) extra = `Contrôlée par : ${props.ClaimedBy}`;
-      } else if (layerId === "paysage-fill") {
-        category = CATEGORY_LABELS[props.type] || "Paysage";
-      }
-
-      popup
-        .setLngLat(e.lngLat)
-        .setHTML(
-          `<p class="popup-title">${name}</p><p class="popup-cat">${category}</p>` +
-            (extra ? `<p class="popup-extra">${extra}</p>` : "")
-        )
-        .addTo(map);
-    });
-  });
-}
-
 /* ---------------------------------------------------------------- search index */
 
 function buildSearchIndex(data) {
   const index = [];
 
-  function addFeatures(key, features, categoryFn, colorFn) {
+  function addFeatures(key, features, categoryFn, colorFn, nameFn) {
     features.forEach((f) => {
-      const name = f.properties.name_fr;
+      const name = nameFn ? nameFn(f) : f.properties.name_fr;
       if (!name) return;
       index.push({
         name,
@@ -602,7 +722,13 @@ function buildSearchIndex(data) {
 
   addFeatures("iles", data.iles.features, () => CATEGORY_LABELS.iles, () => CATEGORY_COLORS.iles);
   addFeatures("lacs", data.lacs.features, () => CATEGORY_LABELS.lacs, () => CATEGORY_COLORS.lacs);
-  addFeatures("politique", data.politique.features, () => CATEGORY_LABELS.politique, () => CATEGORY_COLORS.politique);
+  addFeatures(
+    "politique",
+    data.politique.features,
+    () => CATEGORY_LABELS.politique,
+    () => CATEGORY_COLORS.politique,
+    (f) => f.properties.name_fr || HOUSE_LABELS_FR[f.properties.ClaimedBy] || f.properties.ClaimedBy
+  );
   addFeatures("rivieres", data.rivieres.features, () => CATEGORY_LABELS.rivieres, () => CATEGORY_COLORS.rivieres);
   addFeatures("routes", data.routes.features, () => CATEGORY_LABELS.routes, () => CATEGORY_COLORS.routes);
   addFeatures(
@@ -615,6 +741,12 @@ function buildSearchIndex(data) {
     "paysage",
     data.paysage.features,
     (f) => CATEGORY_LABELS[f.properties.type] || "Paysage",
+    (f) => CATEGORY_COLORS[f.properties.type] || "#5a4327"
+  );
+  addFeatures(
+    "regions",
+    data.regions.features,
+    (f) => CATEGORY_LABELS[f.properties.type] || "Région",
     (f) => CATEGORY_COLORS[f.properties.type] || "#5a4327"
   );
 

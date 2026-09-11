@@ -56,7 +56,7 @@
       <div class="legend-row">
         <span class="legend-swatch" style="background:rgba(46,79,42,0.5);border:1px solid rgba(46,79,42,0.8)"></span>
         <label for="chk-paysage">Paysages</label>
-        <input type="checkbox" id="chk-paysage" checked data-layers="paysage-fill,paysage-outline-mountain,paysage-outline-other,paysage-label" />
+        <input type="checkbox" id="chk-paysage" checked data-layers="paysage-fill,paysage-label,paysage-label-generic" />
       </div>
       <div class="legend-row">
         <span class="legend-swatch line" style="background:#8a5a2b"></span>
@@ -85,14 +85,20 @@
       </div>
       <div class="legend-row">
         <span class="legend-swatch label-swatch" style="color:rgba(80,46,20,0.7);font-weight:700">Aa</span>
-        <label for="chk-regions">Régions</label>
-        <input type="checkbox" id="chk-regions" checked data-layers="politique-label" />
+        <label for="chk-kingdoms">Royaumes</label>
+        <input type="checkbox" id="chk-kingdoms" checked data-layers="politique-label" />
+      </div>
+      <div class="legend-row">
+        <span class="legend-swatch label-swatch" style="color:#2f6a86;font-style:italic">Aa</span>
+        <label for="chk-regions">Régions (mers, monts, déserts…)</label>
+        <input type="checkbox" id="chk-regions" checked data-layers="regions-label" />
       </div>
     </div>
   </div>
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
