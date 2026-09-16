@@ -223,6 +223,12 @@ html, body {
   border-radius: 50%;
 }
 
+.legend-swatch.square {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
 .legend-swatch.line {
   height: 3px;
   border-radius: 2px;
