@@ -19,32 +19,32 @@ const DATA_FILES = {
 };
 
 const COLORS = {
-  water: "#204a5c",
-  land: "#e7d9b3",
-  landLine: "#b9a06a",
-  lake: "#3e7ea6",
-  lakeLine: "#1d3f52",
-  river: "#3e7ea6",
-  border: "#5a3b22",
-  route: "#8a5a2b",
-  wallCasing: "#0c2d3a",
-  wallLine: "#eaf7fb",
-  waterLabel: "#0c2d3a",
-  waterLabelHalo: "#f2ead0",
-  region: "rgba(80, 46, 20, 0.6)",
-  regionHalo: "rgba(236, 223, 192, 0.85)",
-  city: { fill: "#f2c14e", stroke: "#7a1f1f" },
-  town: { fill: "#d98a3d", stroke: "#6b4a25" },
-  castle: { fill: "#4a5568", stroke: "#1f2530" },
-  ruin: { fill: "#9a9a9a", stroke: "#5a5a5a" },
-  forest: { fill: "rgba(46, 79, 42, 0.16)", text: "#2e4f2a" },
-  mountain: { fill: "rgba(96, 82, 66, 0.18)", text: "#4a3c2e" },
-  swamp: { fill: "rgba(72, 84, 42, 0.16)", text: "#48542a" },
-  stepp: { fill: "rgba(196, 164, 86, 0.14)", text: "#8a6a2b" },
-  regionWater: { text: "#2f6a86" },
-  regionShore: { text: "#8a7350" },
-  regionLand: { text: "#6b4a25" },
-  regionDesert: { text: "#b8752e" },
+  water: "#a9d8e3",
+  land: "#f5ecdf",
+  landLine: "#e3cfae",
+  lake: "#8fc6d6",
+  lakeLine: "#5fa0b3",
+  river: "#7fc0d2",
+  border: "#c99bb0",
+  route: "#e0a685",
+  wallCasing: "#5b7fa6",
+  wallLine: "#eef8fb",
+  waterLabel: "#3a7385",
+  waterLabelHalo: "#fbf6ec",
+  region: "rgba(122, 108, 138, 0.55)",
+  regionHalo: "rgba(250, 245, 234, 0.85)",
+  city: { fill: "#f6cf7e", stroke: "#d98a98" },
+  town: { fill: "#f2b98a", stroke: "#c98a6e" },
+  castle: { fill: "#9aa8c2", stroke: "#5c6b8a" },
+  ruin: { fill: "#c7c0d1", stroke: "#8f889c" },
+  forest: { fill: "rgba(122, 178, 140, 0.18)", text: "#4f8a68" },
+  mountain: { fill: "rgba(158, 142, 168, 0.18)", text: "#7a6a8a" },
+  swamp: { fill: "rgba(140, 160, 110, 0.16)", text: "#748a52" },
+  stepp: { fill: "rgba(224, 190, 120, 0.16)", text: "#b8903f" },
+  regionWater: { text: "#4a92a8" },
+  regionShore: { text: "#b39a7a" },
+  regionLand: { text: "#a68a6e" },
+  regionDesert: { text: "#d99a5e" },
 };
 
 const HOUSE_LABELS_FR = {
@@ -74,9 +74,9 @@ const CATEGORY_LABELS = {
 };
 
 const CATEGORY_COLORS = {
-  iles: "#8a6d3b",
+  iles: "#a68a5c",
   lacs: COLORS.lake,
-  politique: "#8a2b14",
+  politique: "#d98a72",
   rivieres: COLORS.river,
   routes: COLORS.route,
   City: COLORS.city.fill,
@@ -334,7 +334,7 @@ function addLayers(map) {
     "mountain", COLORS.mountain.text,
     "swamp", COLORS.swamp.text,
     "stepp", COLORS.stepp.text,
-    "#5a4327",
+    "#a68a6e",
   ];
   map.addLayer({
     id: "paysage-fill",
@@ -494,16 +494,16 @@ function addLayers(map) {
     paint: {
       "text-color": [
         "match", ["get", "ClaimedBy"],
-        "Stark", "rgba(90, 100, 112, 0.7)",
-        "Lannister", "rgba(160, 24, 24, 0.65)",
-        "Baratheon", "rgba(48, 40, 20, 0.7)",
-        "Tyrell", "rgba(63, 110, 42, 0.65)",
-        "Martell", "rgba(191, 84, 21, 0.65)",
-        "Greyjoy", "rgba(30, 42, 52, 0.7)",
-        "Arryn", "rgba(70, 120, 163, 0.65)",
-        "Tully", "rgba(48, 79, 140, 0.65)",
-        "Night's Watch", "rgba(30, 30, 30, 0.7)",
-        "Wildlings", "rgba(112, 75, 37, 0.65)",
+        "Stark", "rgba(140, 155, 175, 0.7)",
+        "Lannister", "rgba(214, 110, 110, 0.65)",
+        "Baratheon", "rgba(168, 140, 90, 0.7)",
+        "Tyrell", "rgba(140, 182, 110, 0.65)",
+        "Martell", "rgba(224, 150, 100, 0.65)",
+        "Greyjoy", "rgba(110, 140, 155, 0.7)",
+        "Arryn", "rgba(140, 185, 220, 0.65)",
+        "Tully", "rgba(120, 145, 205, 0.65)",
+        "Night's Watch", "rgba(110, 110, 120, 0.7)",
+        "Wildlings", "rgba(180, 145, 105, 0.65)",
         COLORS.region,
       ],
       "text-halo-color": COLORS.regionHalo,
@@ -563,7 +563,7 @@ function addLayers(map) {
       "text-size": ["interpolate", ["linear"], ["zoom"], 3, 10, 8, 13],
     },
     paint: {
-      "text-color": "#5a4327",
+      "text-color": "#a68a5c",
       "text-halo-color": COLORS.land,
       "text-halo-width": 1.4,
     },
@@ -689,14 +689,14 @@ function addLayers(map) {
     type: "fill",
     source: "highlight",
     filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "fill-color": "#8a1f1f", "fill-opacity": 0.15 },
+    paint: { "fill-color": "#e08fa3", "fill-opacity": 0.15 },
   });
   map.addLayer({
     id: "highlight-line",
     type: "line",
     source: "highlight",
     filter: ["!=", ["geometry-type"], "Point"],
-    paint: { "line-color": "#8a1f1f", "line-width": 3, "line-opacity": 0.85 },
+    paint: { "line-color": "#e08fa3", "line-width": 3, "line-opacity": 0.85 },
   });
 }
 
@@ -741,13 +741,13 @@ function buildSearchIndex(data) {
     "paysage",
     data.paysage.features,
     (f) => CATEGORY_LABELS[f.properties.type] || "Paysage",
-    (f) => CATEGORY_COLORS[f.properties.type] || "#5a4327"
+    (f) => CATEGORY_COLORS[f.properties.type] || "#a68a6e"
   );
   addFeatures(
     "regions",
     data.regions.features,
     (f) => CATEGORY_LABELS[f.properties.type] || "Région",
-    (f) => CATEGORY_COLORS[f.properties.type] || "#5a4327"
+    (f) => CATEGORY_COLORS[f.properties.type] || "#a68a6e"
   );
 
   index.sort((a, b) => a.name.localeCompare(b.name, "fr"));
