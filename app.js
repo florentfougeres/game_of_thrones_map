@@ -33,10 +33,11 @@ const COLORS = {
   waterLabelHalo: "#fbf6ec",
   region: "rgba(122, 108, 138, 0.55)",
   regionHalo: "rgba(250, 245, 234, 0.85)",
-  city: { fill: "#f6cf7e", stroke: "#d98a98" },
-  town: { fill: "#f2b98a", stroke: "#c98a6e" },
-  castle: { fill: "#9aa8c2", stroke: "#5c6b8a" },
+  city: { fill: "#141414", stroke: "#ffffff" },
+  town: { fill: "#141414", stroke: "#ffffff" },
+  castle: { fill: "#141414", stroke: "#ffffff" },
   ruin: { fill: "#c7c0d1", stroke: "#8f889c" },
+  placeLabel: "#141414",
   forest: { fill: "rgba(122, 178, 140, 0.18)", text: "#4f8a68" },
   mountain: { fill: "rgba(158, 142, 168, 0.18)", text: "#7a6a8a" },
   swamp: { fill: "rgba(140, 160, 110, 0.16)", text: "#748a52" },
@@ -287,7 +288,26 @@ function addSources(map, data) {
   });
 }
 
+// Génère un petit carré plein (avec liseré) sous forme d'ImageData, utilisé
+// comme icône pour les châteaux — MapLibre n'a pas de forme "carré" native
+// pour les couches "circle".
+function createSquareIcon(size, fillColor, strokeColor, strokeWidth) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = strokeColor;
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = fillColor;
+  ctx.fillRect(strokeWidth, strokeWidth, size - strokeWidth * 2, size - strokeWidth * 2);
+  return ctx.getImageData(0, 0, size, size);
+}
+
 function addLayers(map) {
+  if (!map.hasImage("lieu-square-castle")) {
+    map.addImage("lieu-square-castle", createSquareIcon(24, COLORS.castle.fill, COLORS.castle.stroke, 3));
+  }
+
   // ---- terre / eau -------------------------------------------------
   map.addLayer({
     id: "fond-fill",
@@ -637,26 +657,42 @@ function addLayers(map) {
 
   // ---- lieux : cercles par ordre d'importance ----------------------
   const lieuxTiers = [
-    { id: "city", types: ["City"], minzoom: 0, r: [5, 9], color: COLORS.city, textMinzoom: 0, textSize: [13, 18], font: "Noto Sans Bold" },
-    { id: "town", types: ["Town"], minzoom: 3, r: [4, 7], color: COLORS.town, textMinzoom: 3, textSize: [11, 14], font: "Noto Sans Bold" },
-    { id: "castle", types: ["Castle"], minzoom: 4, r: [3.4, 6], color: COLORS.castle, textMinzoom: 4.5, textSize: [10, 13], font: "Noto Sans Regular" },
-    { id: "ruin", types: ["Ruin", "Other"], minzoom: 5, r: [2.8, 5], color: COLORS.ruin, textMinzoom: 5.5, textSize: [9, 11], font: "Noto Sans Italic" },
+    { id: "city", types: ["City"], shape: "circle", minzoom: 0, r: [5, 9], color: COLORS.city, textMinzoom: 0, textSize: [13, 18], font: "Noto Sans Bold" },
+    { id: "town", types: ["Town"], shape: "circle", minzoom: 3, r: [4, 7], color: COLORS.town, textMinzoom: 3, textSize: [11, 14], font: "Noto Sans Bold" },
+    { id: "castle", types: ["Castle"], shape: "square", minzoom: 4, r: [3.4, 6], color: COLORS.castle, textMinzoom: 4.5, textSize: [10, 13], font: "Noto Sans Regular" },
+    { id: "ruin", types: ["Ruin", "Other"], shape: "circle", minzoom: 5, r: [2.8, 5], color: COLORS.ruin, textMinzoom: 5.5, textSize: [9, 11], font: "Noto Sans Italic" },
   ];
 
   lieuxTiers.forEach((tier) => {
-    map.addLayer({
-      id: `lieux-circle-${tier.id}`,
-      type: "circle",
-      source: "lieux",
-      minzoom: tier.minzoom,
-      filter: ["in", ["get", "type"], ["literal", tier.types]],
-      paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, tier.r[0], 9, tier.r[1]],
-        "circle-color": tier.color.fill,
-        "circle-stroke-color": tier.color.stroke,
-        "circle-stroke-width": 1.2,
-      },
-    });
+    if (tier.shape === "square") {
+      map.addLayer({
+        id: `lieux-circle-${tier.id}`,
+        type: "symbol",
+        source: "lieux",
+        minzoom: tier.minzoom,
+        filter: ["in", ["get", "type"], ["literal", tier.types]],
+        layout: {
+          "icon-image": "lieu-square-castle",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 3, tier.r[0] / 12, 9, tier.r[1] / 12],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+      });
+    } else {
+      map.addLayer({
+        id: `lieux-circle-${tier.id}`,
+        type: "circle",
+        source: "lieux",
+        minzoom: tier.minzoom,
+        filter: ["in", ["get", "type"], ["literal", tier.types]],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, tier.r[0], 9, tier.r[1]],
+          "circle-color": tier.color.fill,
+          "circle-stroke-color": tier.color.stroke,
+          "circle-stroke-width": 1.2,
+        },
+      });
+    }
   });
 
   lieuxTiers.forEach((tier) => {
@@ -676,7 +712,7 @@ function addLayers(map) {
         "text-optional": true,
       },
       paint: {
-        "text-color": tier.color.stroke,
+        "text-color": COLORS.placeLabel,
         "text-halo-color": COLORS.land,
         "text-halo-width": 1.6,
       },
